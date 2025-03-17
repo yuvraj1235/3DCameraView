@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Gesture Orbit & Zoom with Sound</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        video { position: fixed; top: 10px; left: 10px; width: 160px; height: auto; border: 2px solid black; }
+    </style>
+</head>
+<body>
+    <video id="video" autoplay playsinline></video>
+    <audio id="zoomSound" src="zoom.mp3"></audio>
+    <audio id="rotateSound" src="rotate.mp3"></audio>
+
+    <script>
+        let video;
+        let handposeModel;
+        let predictions = [];
+        let rotationX = 0, rotationY = 0;
+        let targetRotationX = 0, targetRotationY = 0;
+        let zoom = -200;
+        let targetZoom = -200;
+        const smoothingFactor = 0.2;
+
+        let lastZoom = targetZoom;
+        let lastRotationX = targetRotationX;
+        let lastRotationY = targetRotationY;
+
+        async function setup() {
+            createCanvas(windowWidth, windowHeight, WEBGL);
+            video = createCapture(VIDEO);
+            video.size(320, 240);
+            video.hide();
+
+            handposeModel = await handpose.load();
+            console.log("✅ Handpose Model Loaded!");
+
+            detectHands();
+        }
+
+        async function detectHands() {
+            if (!handposeModel) return;
+
+            const hands = await handposeModel.estimateHands(video.elt);
+            if (hands.length > 0) {
+                predictions = hands;
+                let indexFinger = hands[0].landmarks[8];
+                let thumb = hands[0].landmarks[4];
+
+                let distance = dist(indexFinger[0], indexFinger[1], thumb[0], thumb[1]);
+                targetZoom = map(distance, 50, 300, 200, -800, true);
+                targetRotationX = map(indexFinger[1], 0, video.height, PI, -PI);
+                targetRotationY = map(indexFinger[0], 0, video.width, PI, -PI);
+            }
+
+            requestAnimationFrame(detectHands);
+        }
+
+        function draw() {
+            background(250, 180, 200);
+            
+            rotationX = lerp(rotationX, targetRotationX, smoothingFactor);
+            rotationY = lerp(rotationY, targetRotationY, smoothingFactor);
+            zoom = lerp(zoom, targetZoom, smoothingFactor);
+
+            if (abs(zoom - lastZoom) > 30) {
+                document.getElementById("zoomSound").play();
+                lastZoom = zoom;
+            }
+
+            if (abs(rotationX - lastRotationX) > 0.2 || abs(rotationY - lastRotationY) > 0.2) {
+                document.getElementById("rotateSound").play();
+                lastRotationX = rotationX;
+                lastRotationY = rotationY;
+            }
+
+            translate(0, 0, zoom);
+            rotateX(rotationX);
+            rotateY(rotationY);
+
+            noFill();
+            stroke(0, 0, 0, 150);
+            strokeWeight(2);
+
+            for (let zAngle = 0; zAngle < 180; zAngle += 20) {
+                for (let xAngle = 0; xAngle < 360; xAngle += 20) {
+                    push();
+                    rotateZ(zAngle);
+                    rotateX(xAngle);
+                    translate(0, 300, 0);
+                    box(50);
+                    pop();
+                }
+            }
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+        }
+    </script>
+</body>
+</html>
